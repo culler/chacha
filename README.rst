@@ -11,7 +11,7 @@ Installation
 
 Install this package with pip:
 
-`python3 -m pip install chafe`
+``python3 -m pip install chafe``
 
 The pypi package name is "chafe".  The python module installed with
 this command is named "chacha".
