@@ -27,14 +27,14 @@ To encrypt a file named myfile:
  ``% python3 -m chacha.encrypt myfile``
 
 You will be prompted for a password, and an encrypted file named
-myfile.cha will be created.  The password will be visible until the
+*myfile.cha* will be created.  The password will be visible until the
 encryption is finished, then erased.  (So write it down first!)
 
 To decrypt myfile.cha:
 
   ``% python3 -m chacha.decrypt myfile.cha``
 
-You will be prompted for the password, and a decrypted file named myfile.
+You will be prompted for the password, and a decrypted file named *myfile*
 will be created.  The password will be visible until the decryption is
 finished, then erased.
 
