@@ -11,10 +11,11 @@ Installation
 
 Install this package with pip:
 
-``python3 -m pip install chafe``
+``python3 -m pip install --pre chafe``
 
 The pypi package name is "chafe".  The python module installed with
-this command is named "chacha".
+this command is named "chacha".  The --pre option is needed because
+the current version of this package is a pre-release.
 
 Usage  
 ----- 
