@@ -56,6 +56,7 @@ class ChaChaContext:
         if not passphrase:
             raise ValueError('You must provide a pass phrase.')
         self.key_bytes = sha256(passphrase).digest()
+        self.check_bytes = sha256(self.key_bytes).digest()
 
     def encrypt_bytes(self, plaintext: bytes) -> bytes:
         """Return the ciphertext with the random nonce appended."""
@@ -73,32 +74,31 @@ class ChaChaContext:
         decrypted = decryptor.update(ciphertext[:-8]) + decryptor.finalize()
         return decrypted
 
-    def encrypt_file_from_bytes(self, plaintext: bytes, filename: str,
-            check: bytes) -> None:
+    def encrypt_file_from_bytes(self, plaintext: bytes, filename: str) ->None:
         """Encrypt and write, prepending the 32 byte check."""
         encrypted = self.encrypt_bytes(plaintext)
         with open(filename, 'wb') as outfile:
-            outfile.write(check)
+            outfile.write(self.check_bytes)
             outfile.write(encrypted)
 
-    def decrypt_file_to_bytes(self, filename: str, check: bytes) -> bytes:
+    def decrypt_file_to_bytes(self, filename: str) -> bytes:
         """Validate the 32 byte header and return the decrypted tail."""
         with open(filename, 'rb') as infile:
             saved_check = infile.read(32)
             tail = infile.read()
-        if check != saved_check:
+        if self.check_bytes != saved_check:
             raise ValueError('Invalid check block.')
         return self.decrypt_bytes(tail)
 
-    def encrypt_file(self, filename: str, check: bytes) -> None:
+    def encrypt_file(self, filename: str) -> None:
         "Read an unencrypted file and write its encryption."
         with open(filename, 'rb') as infile:
             plaintext = infile.read()
-        self.encrypt_file_from_bytes(plaintext, filename + '.cha', check)
+        self.encrypt_file_from_bytes(plaintext, filename + '.cha')
 
-    def decrypt_file(self, filename: str, check: bytes) -> None:
+    def decrypt_file(self, filename: str) -> None:
         """Read an encrypted file and write its decryption."""
-        decrypted = self.decrypt_file_to_bytes(filename, check)
+        decrypted = self.decrypt_file_to_bytes(filename)
         basename, _ = os.path.splitext(filename)
         with open(basename, 'wb') as outfile:
             outfile.write(decrypted)
@@ -121,8 +121,7 @@ def check_file(filename):
 def get_passphrase() ->str:
     prompt = 'pass phrase: '
     passphrase = input(prompt)
-    blanks = ' '*(len(passphrase) + len(prompt))
-    print('\033[1A' + blanks + '\033[1A')
+    print('\033[1F\033[0K', end='')
     return passphrase.encode('utf-8')
 
 def encrypt_file():
@@ -131,9 +130,8 @@ def encrypt_file():
     if not check_file(filename + '.cha'):
         sys.exit(1)
     passphrase = get_passphrase()
-    check = sha256(sha256(passphrase).digest()).digest()
     context = ChaChaContext(passphrase)
-    context.encrypt_file(filename, check)
+    context.encrypt_file(filename)
 
 def decrypt_file():
     """Entry point for decrypting a .cha file."""
@@ -146,9 +144,8 @@ def decrypt_file():
     if not check_file(basename):
         sys.exit(1)
     passphrase = get_passphrase()
-    check = sha256(sha256(passphrase).digest()).digest()
     context = ChaChaContext(passphrase)
     try:
-        context.decrypt_file(filename, check)
+        context.decrypt_file(filename)
     except ValueError:
         print('That pass phrase is not the one used to encrypt the file.')
