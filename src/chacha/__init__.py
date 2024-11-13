@@ -1,6 +1,6 @@
 """
 This package provides tools for encrypting and decrypting files with
-the ChaCha stream cipher using a key based on a pass phrase.
+the ChaCha20 stream cipher using a key based on a pass phrase.
 
 It provides two entry points named encrypt and decrypt.  That means
 that if this module is in your python path then the module can be
@@ -33,23 +33,25 @@ and
 
 import os
 import sys
-from cryptography.hazmat.primitives.ciphers import Cipher
-from cryptography.hazmat.primitives.ciphers.algorithms import ChaCha20
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from hashlib import sha256
-__version__ = '1.0.0a2'
-zero = b'\x00\x00\x00\x00\x00\x00\x00\x00'
+__version__ = '1.0.0a4'
 
 class ChaChaContext:
-    """Encrypts or decrypts strings or files using ChaCha20.
+    """Encrypts or decrypts strings or files using ChaCha20-poly1305.
 
     The key is the sha256 hash of a provided passphrase.  Each
     encryption uses a new randomly generated nonce, which is saved at
-    the end of the cyphertext.  When encrypting a file, a 32 byte check
-    value is stored at the beginning of the file.  This allows checking
-    that the passphrase provided for decryption matches the one used for
-    encryption (without exposing the key).  The check value is
-    constructed by applying the sha256 hash to the key. The ChaCha
-    counter is set to 0 for both encryption and decryption.
+    the start of the cyphertext.  When encrypting a file, a 32 byte
+    check value is stored at the beginning of the file, before the
+    nonce.  The check value is constructed by applying the sha256 hash
+    to the pass phrase twice.  This allows checking that the passphrase
+    provided for decryption matches the one used for encryption (without
+    exposing the key).  The check value is also used as the additional
+    authenticated data for a poly1305 authenticator.
+
+    This class is not suitable for very large files, because it reads
+    the entire file into memory before encrypting or decrypting it.
     """
     
     def __init__(self, passphrase:bytes=b''):
@@ -59,20 +61,17 @@ class ChaChaContext:
         self.check_bytes = sha256(self.key_bytes).digest()
 
     def encrypt_bytes(self, plaintext: bytes) -> bytes:
-        """Return the ciphertext with the random nonce appended."""
-        nonce = os.urandom(8)
-        algorithm = ChaCha20(self.key_bytes, zero + nonce)
-        encryptor = Cipher(algorithm, mode=None).encryptor()
-        encrypted = encryptor.update(plaintext) + encryptor.finalize()
-        return encrypted + nonce
+        """Return the ciphertext with the nonce prepended."""
+        nonce = os.urandom(12)
+        encryptor = ChaCha20Poly1305(self.key_bytes)
+        ciphertext = encryptor.encrypt(nonce, plaintext, self.check_bytes)
+        return nonce + ciphertext
     
     def decrypt_bytes(self, ciphertext: bytes) -> bytes:
-        """Return the plaintext, decrypted with the appended nonce.""" 
-        nonce = ciphertext[-8:]
-        algorithm = ChaCha20(self.key_bytes, zero + nonce)
-        decryptor = Cipher(algorithm, mode=None).decryptor()
-        decrypted = decryptor.update(ciphertext[:-8]) + decryptor.finalize()
-        return decrypted
+        """Return the plaintext, decrypted with the prepended nonce.""" 
+        nonce = ciphertext[:12]
+        decryptor = ChaCha20Poly1305(self.key_bytes)
+        return decryptor.decrypt(nonce, ciphertext[12:], self.check_bytes)
 
     def encrypt_file_from_bytes(self, plaintext: bytes, filename: str) ->None:
         """Encrypt and write, prepending the 32 byte check."""
@@ -82,12 +81,12 @@ class ChaChaContext:
             outfile.write(encrypted)
 
     def decrypt_file_to_bytes(self, filename: str) -> bytes:
-        """Validate the 32 byte header and return the decrypted tail."""
+        """Validate the 32 byte check value and return the decrypted tail."""
         with open(filename, 'rb') as infile:
             saved_check = infile.read(32)
             tail = infile.read()
         if self.check_bytes != saved_check:
-            raise ValueError('Invalid check block.')
+            raise ValueError('Invalid check value.')
         return self.decrypt_bytes(tail)
 
     def encrypt_file(self, filename: str) -> None:
@@ -103,13 +102,13 @@ class ChaChaContext:
         with open(basename, 'wb') as outfile:
             outfile.write(decrypted)
 
-def check_for_cha(filename):
+def check_for_dot_cha(filename):
     basename, ext = os.path.splitext(filename)
     if ext != '.cha':
         raise ValueError ('The filename extension must be .cha.')
     return basename
 
-def check_file(filename):
+def can_destroy(filename):
     if os.path.exists(filename):
         print('The current file %s will be destroyed.' % filename)
         answer = input('Type yes to continue, no to cancel: ')
@@ -127,7 +126,7 @@ def get_passphrase() ->str:
 def encrypt_file():
     """Entry point for encrypting a file.  Writes a .cha file."""
     filename = sys.argv[1]
-    if not check_file(filename + '.cha'):
+    if not can_destroy(filename + '.cha'):
         sys.exit(1)
     passphrase = get_passphrase()
     context = ChaChaContext(passphrase)
@@ -137,11 +136,11 @@ def decrypt_file():
     """Entry point for decrypting a .cha file."""
     filename = sys.argv[1]
     try:
-        basename = check_for_cha(filename)
+        basename = check_for_dot_cha(filename)
     except ValueError:
         print('The filename extension must be .cha.')
         sys.exit(1)
-    if not check_file(basename):
+    if not can_destroy(basename):
         sys.exit(1)
     passphrase = get_passphrase()
     context = ChaChaContext(passphrase)
