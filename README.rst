@@ -11,9 +11,9 @@ Warning
 -------
 
 This is a work in progress, published here for testing only.  Do not
-use it for anything important.  The file protocols are subject to
-change, which could leave you with encrypted files that you cannot
-decrypt.
+use it for anything important.  The file formats and encryption
+algorithms are subject to change, which could leave you with encrypted
+files that you cannot decrypt.
 
 Installation
 ------------
