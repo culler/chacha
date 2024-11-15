@@ -1,3 +1,7 @@
+# This file is part of the chafe Python package which is distributed
+# under the MIT license.  See the file LICENSE for details.
+# Copyright © 2024 by Marc Culler and others️
+
 """
 This package provides tools for encrypting and decrypting files with
 the ChaCha20 stream cipher using a key based on a pass phrase.
@@ -33,12 +37,13 @@ and
 
 import os
 import sys
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from hashlib import sha256
-__version__ = '1.0.0a4'
+from ._chacha import encrypt as chacha_encrypt
+
+__version__ = '1.0.0a5'
 
 class ChaChaContext:
-    """Encrypts or decrypts strings or files using ChaCha20-poly1305.
+    """Encrypts or decrypts strings or files using ChaCha20.
 
     The key is the sha256 hash of a provided passphrase.  Each
     encryption uses a new randomly generated nonce, which is saved at
@@ -47,8 +52,10 @@ class ChaChaContext:
     nonce.  The check value is constructed by applying the sha256 hash
     to the pass phrase twice.  This allows checking that the passphrase
     provided for decryption matches the one used for encryption (without
-    exposing the key).  The check value is also used as the additional
-    authenticated data for a poly1305 authenticator.
+    exposing the key).
+
+    Currently the encrypted files are not authenticated - this is a
+    work in progress.
 
     This class is not suitable for very large files, because it reads
     the entire file into memory before encrypting or decrypting it.
@@ -63,15 +70,17 @@ class ChaChaContext:
     def encrypt_bytes(self, plaintext: bytes) -> bytes:
         """Return the ciphertext with the nonce prepended."""
         nonce = os.urandom(12)
-        encryptor = ChaCha20Poly1305(self.key_bytes)
-        ciphertext = encryptor.encrypt(nonce, plaintext, self.check_bytes)
+        #encryptor = ChaCha20Poly1305(self.key_bytes)
+        #ciphertext = encryptor.encrypt(nonce, plaintext, self.check_bytes)
+        ciphertext = chacha_encrypt(self.key_bytes, nonce, plaintext)
         return nonce + ciphertext
     
     def decrypt_bytes(self, ciphertext: bytes) -> bytes:
         """Return the plaintext, decrypted with the prepended nonce.""" 
         nonce = ciphertext[:12]
-        decryptor = ChaCha20Poly1305(self.key_bytes)
-        return decryptor.decrypt(nonce, ciphertext[12:], self.check_bytes)
+        #decryptor = ChaCha20Poly1305(self.key_bytes)
+        #return decryptor.decrypt(nonce, ciphertext[12:], self.check_bytes)
+        return chacha_encrypt(self.key_bytes, nonce, ciphertext[12:])
 
     def encrypt_file_from_bytes(self, plaintext: bytes, filename: str) ->None:
         """Encrypt and write, prepending the 32 byte check."""

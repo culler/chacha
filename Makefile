@@ -9,7 +9,9 @@ dist:
 	env PIP_CONFIG_FILE=/dev/null python3 -m build --sdist --wheel .
 
 clean:
-	rm -rf build dist */*.egg-info */__pycache__ */*.pyc
+	rm -rf build dist */*.egg-info
+	rm -rf `find . -name __pycache__`
+	rm -f src/_chacha/_chacha.c
 
 testpypi-upload:
 	python3 -m twine upload --verbose --repository testpypi dist/*

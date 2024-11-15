@@ -1,10 +1,9 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools", "wheel", "cython"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "chafe"
-dependencies = ["cryptography>43.0"]
 dynamic = ["version"]
 description = "Encrypts and decrypts files using a pass phrase."
 readme = {file = "README.rst", content-type = "text/x-rst"}
@@ -20,7 +19,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Topic :: Utilities"
