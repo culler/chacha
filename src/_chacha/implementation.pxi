@@ -3,7 +3,8 @@
 # conform to RFC 7359.  The modified version uses a 32 bit counter
 # and a 96 bit nonce instead of a 64 bit counter and 64 bit nonce.
 # It also changes the signature of the ivsetup function to provide
-# separate arguments for the counter and nonce.
+# separate arguments for the counter and nonce and removes the unused
+# variable ivbits from the keysetup function.
 #
 # The string will be interpreted as verbatim C code by the Cython
 # compiler, so these functions will be compiled and included in the
@@ -16,13 +17,6 @@ chacha-ref.c version 20080118
 D. J. Bernstein
 Public domain.
 */
-
-/* Uncomment the next line to print information for testing.
-#define CHACHA_DEBUG
-*/ 
-#ifdef CHACHA_DEBUG
-#include <stdio.h>
-#endif
 
 typedef struct {
   u32 input[16]; /* could be compressed */
@@ -39,12 +33,27 @@ typedef struct {
   x[a] = PLUS(x[a],x[b]); x[d] = ROTATE(XOR(x[d],x[a]), 8); \
   x[c] = PLUS(x[c],x[d]); x[b] = ROTATE(XOR(x[b],x[c]), 7);
 
-static void chacha_wordtobyte(u8 output[64], const u32 input[16])
+/*
+#define CHACHA_DEBUG
+*/
+#ifdef CHACHA_DEBUG
+#include <stdio.h>
+#define PRINT_STATE(header) \
+printf(header); \
+for (i = 0; i < 16; i += 4) { \
+printf("%08x %08x %08x %08x\n", x[i], x[i + 1], x[i + 2], x[i + 3]); \
+}
+#else
+#define PRINT_STATE(header)
+#endif
+
+static void chacha_wordtobyte(u8 output[64], u32 x[16], const u32 input[16])
 {
-  u32 x[16];
   int i;
 
   for (i = 0; i < 16; ++i) x[i] = input[i];
+
+  PRINT_STATE("Start:\n");
   for (i = 20; i > 0; i -= 2) {
     QUARTERROUND( 0, 4, 8,12)
     QUARTERROUND( 1, 5, 9,13)
@@ -55,12 +64,9 @@ static void chacha_wordtobyte(u8 output[64], const u32 input[16])
     QUARTERROUND( 2, 7, 8,13)
     QUARTERROUND( 3, 4, 9,14)
   }
+  PRINT_STATE("After 20 rounds:\n");
   for (i = 0; i < 16; ++i) x[i] = PLUS(x[i], input[i]);
-#ifdef CHACHA_DEBUG
-  for (i = 0; i < 16; i += 4) {
-    fprintf(stderr, "%08x, %08x, %08x, %08x\n", x[i], x[i + 1], x[i + 2], x[i + 3]);
-  }
-#endif
+  PRINT_STATE("After addition:\n")
   for (i = 0; i < 16; ++i) U32TO8_LITTLE(output + 4 * i, x[i]);
 }
 
@@ -72,7 +78,7 @@ void chacha_init(void)
 static const char sigma[16] = "expand 32-byte k";
 static const char tau[16] = "expand 16-byte k";
 
-void chacha_keysetup(chacha_context *x, const u8 *k, u32 kbits, u32 ivbits)
+void chacha_keysetup(chacha_context *x, const u8 *k, u32 kbits)
 {
   const char *constants;
 
@@ -113,11 +119,12 @@ void chacha_ivsetup(chacha_context *x, const u32 counter, const u8 *nonce)
 void chacha_encrypt_bytes(chacha_context *x, const u8 *m, u8 *c, u32 bytes)
 {
   u8 output[64];
+  u32 state[16];
   int i;
 
   if (!bytes) return;
   for (;;) {
-    chacha_wordtobyte(output, x->input);
+    chacha_wordtobyte(output, state, x->input);
     x->input[12] = PLUSONE(x->input[12]);
     if (bytes <= 64) {
       for (u32 i = 0; i < bytes; ++i) c[i] = m[i] ^ output[i];
@@ -146,29 +153,10 @@ void chacha_keystream_bytes(chacha_context *x, u8 *stream, u32 bytes)
         unsigned int input[16]
     ctypedef unsigned int u32
     ctypedef unsigned char u8
-    void chacha_wordtobyte(u8 *output, u32 *input)
+    void chacha_wordtobyte(u8 *output, u32 *state, u32 *input)
     void chacha_init()
-    void chacha_keysetup(chacha_context *x, const u8 *k, u32 kbits, u32 ivbits)
+    void chacha_keysetup(chacha_context *x, const u8 *k, u32 kbits)
     void chacha_ivsetup(chacha_context *x, const u8 counter, const u8 *nonce)
     void chacha_encrypt_bytes(chacha_context *x, const u8 *m, u8 *c, u32 bytes)
     void chacha_decrypt_bytes(chacha_context *x, const u8 *m, u8 *c, u32 bytes)
     void chacha_keystream_bytes(chacha_context *x, u8 *stream, u32 bytes)
-
-from libc.stdlib cimport malloc, free
-from cpython.bytes cimport PyBytes_FromStringAndSize
-
-def encrypt(bytes key, bytes nonce, bytes plaintext, u32 counter=0):
-    cdef chacha_context context
-    cdef Py_ssize_t length = len(plaintext)
-    cdef u8* ciphertext = <u8*>malloc(length)
-    cdef bytes result
-    assert len(nonce) == 12
-    # The init function is a no-op for this cipher.
-    # chacha_init()
-    # We use a 32 byte key and a 16 byte initial value.
-    chacha_keysetup(&context, key, 256, 128)
-    chacha_ivsetup(&context, counter, nonce) 
-    chacha_encrypt_bytes(&context, plaintext, ciphertext, length)
-    result = PyBytes_FromStringAndSize(<char *>ciphertext, length)
-    free(ciphertext)
-    return result

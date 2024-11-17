@@ -38,8 +38,8 @@ and
 import os
 import sys
 from hashlib import sha256
-from ._chacha import encrypt as chacha_encrypt
-
+from ._chacha import chacha_encrypt
+from ._chacha import poly1305_tag
 __version__ = '1.0.0a5'
 
 class ChaChaContext:
@@ -70,8 +70,6 @@ class ChaChaContext:
     def encrypt_bytes(self, plaintext: bytes) -> bytes:
         """Return the ciphertext with the nonce prepended."""
         nonce = os.urandom(12)
-        #encryptor = ChaCha20Poly1305(self.key_bytes)
-        #ciphertext = encryptor.encrypt(nonce, plaintext, self.check_bytes)
         ciphertext = chacha_encrypt(self.key_bytes, nonce, plaintext)
         return nonce + ciphertext
     
