@@ -41,7 +41,12 @@ from hashlib import sha256
 from ._chacha import chacha_encrypt
 from ._chacha import poly1305_tag
 __version__ = '1.0.0a5'
+class BadPassphrase(Exception):
+    pass
 
+class BadTag(Exception):
+    pass
+    
 class ChaChaContext:
     """Encrypts or decrypts strings or files using ChaCha20.
 
@@ -53,9 +58,6 @@ class ChaChaContext:
     to the pass phrase twice.  This allows checking that the passphrase
     provided for decryption matches the one used for encryption (without
     exposing the key).
-
-    Currently the encrypted files are not authenticated - this is a
-    work in progress.
 
     This class is not suitable for very large files, because it reads
     the entire file into memory before encrypting or decrypting it.
@@ -71,30 +73,34 @@ class ChaChaContext:
         """Return the ciphertext with the nonce prepended."""
         nonce = os.urandom(12)
         ciphertext = chacha_encrypt(self.key_bytes, nonce, plaintext)
-        return nonce + ciphertext
+        tag = poly1305_tag(self.key_bytes, nonce, plaintext)
+        return nonce + tag + self.check_bytes + ciphertext
     
-    def decrypt_bytes(self, ciphertext: bytes) -> bytes:
+    def decrypt_bytes(self, encryption: bytes) -> bytes:
         """Return the plaintext, decrypted with the prepended nonce.""" 
-        nonce = ciphertext[:12]
-        #decryptor = ChaCha20Poly1305(self.key_bytes)
-        #return decryptor.decrypt(nonce, ciphertext[12:], self.check_bytes)
-        return chacha_encrypt(self.key_bytes, nonce, ciphertext[12:])
+        nonce = encryption[:12]
+        tag = encryption[12:28]
+        check = encryption[28:60]
+        ciphertext = encryption[60:]
+        plaintext = chacha_encrypt(self.key_bytes, nonce, ciphertext)
+        if self.check_bytes != check:
+            raise BadPassphrase
+        computed_tag = poly1305_tag(self.key_bytes, nonce, plaintext)
+        if computed_tag != tag:
+            raise BadTag
+        return plaintext
 
     def encrypt_file_from_bytes(self, plaintext: bytes, filename: str) ->None:
-        """Encrypt and write, prepending the 32 byte check."""
+        """Encrypt plaintext and write to file."""
         encrypted = self.encrypt_bytes(plaintext)
         with open(filename, 'wb') as outfile:
-            outfile.write(self.check_bytes)
             outfile.write(encrypted)
 
     def decrypt_file_to_bytes(self, filename: str) -> bytes:
-        """Validate the 32 byte check value and return the decrypted tail."""
+        """Read file and decrypt the contents."""
         with open(filename, 'rb') as infile:
-            saved_check = infile.read(32)
-            tail = infile.read()
-        if self.check_bytes != saved_check:
-            raise ValueError('Invalid check value.')
-        return self.decrypt_bytes(tail)
+            encryption = infile.read()
+        return self.decrypt_bytes(encryption)
 
     def encrypt_file(self, filename: str) -> None:
         "Read an unencrypted file and write its encryption."
@@ -153,5 +159,7 @@ def decrypt_file():
     context = ChaChaContext(passphrase)
     try:
         context.decrypt_file(filename)
-    except ValueError:
-        print('That pass phrase is not the one used to encrypt the file.')
+    except BadPassphrase:
+        print('Invalid passphrase.')
+    except BadTag:
+        print('This file has been tampered with!')
