@@ -37,7 +37,10 @@ To encrypt a file named myfile:
 
 You will be prompted for a password, and an encrypted file named
 *myfile.cha* will be created.  The password will be visible until the
-encryption is finished, then erased.  (So write it down first!)
+encryption is finished, then erased.  (So write it down on a piece of
+paper before it disappears!)  Note that the erasure uses ANSI escape
+sequences which will not work correctly if the terminal window is
+too narrow.
 
 To decrypt myfile.cha:
 
@@ -47,8 +50,8 @@ You will be prompted for the password, and a decrypted file named *myfile*
 will be created.  The password will be visible until the decryption is
 finished, then erased.
 
-If you install this module with pip and have configured you path to make
-pip-installed scripts available, then the commands will simply be:
+If you install this module with pip and have configured your path to make
+your pip-installed scripts available, then the commands will simply be:
 
   ``% chacha-encrypt myfile``
 
