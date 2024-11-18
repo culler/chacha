@@ -40,7 +40,7 @@ import sys
 from hashlib import sha256
 from ._chacha import chacha_encrypt
 from ._chacha import poly1305_tag
-__version__ = '1.0.0a5'
+__version__ = '1.0.0a6'
 class BadPassphrase(Exception):
     pass
 
@@ -48,16 +48,15 @@ class BadTag(Exception):
     pass
     
 class ChaChaContext:
-    """Encrypts or decrypts strings or files using ChaCha20.
+    """Encrypts or decrypts strings or files using ChaCha20 and Pply1305.
 
-    The key is the sha256 hash of a provided passphrase.  Each
-    encryption uses a new randomly generated nonce, which is saved at
-    the start of the cyphertext.  When encrypting a file, a 32 byte
-    check value is stored at the beginning of the file, before the
-    nonce.  The check value is constructed by applying the sha256 hash
-    to the pass phrase twice.  This allows checking that the passphrase
-    provided for decryption matches the one used for encryption (without
-    exposing the key).
+    The ChaCha20 key is the sha256 hash of a provided passphrase.  Each
+    encryption uses a new randomly generated nonce, which is prepended
+    at the start of the byte sequence produced by encrypting a plaintext
+    byte sequence.  The nonce is followed by a 16 byte authentication
+    tag generated with the Poly1305 algorithm.  The tag is followed by a
+    16 bit hash which can be used to check if a user made a typo when
+    entering the pass phrase for decryption.
 
     This class is not suitable for very large files, because it reads
     the entire file into memory before encrypting or decrypting it.
@@ -66,27 +65,31 @@ class ChaChaContext:
     def __init__(self, passphrase:bytes=b''):
         if not passphrase:
             raise ValueError('You must provide a pass phrase.')
-        self.key_bytes = sha256(passphrase).digest()
-        self.check_bytes = sha256(self.key_bytes).digest()
+        self.passphrase = passphrase
+        self.key = sha256(self.passphrase).digest()
 
     def encrypt_bytes(self, plaintext: bytes) -> bytes:
-        """Return the ciphertext with the nonce prepended."""
+        """Return the ciphertext with the nonce, tag, and check prepended."""
         nonce = os.urandom(12)
-        ciphertext = chacha_encrypt(self.key_bytes, nonce, plaintext)
-        tag = poly1305_tag(self.key_bytes, nonce, plaintext)
-        return nonce + tag + self.check_bytes + ciphertext
+        # Use the nonce as salt to avoid exposing the key.
+        check = sha256(nonce + self.passphrase).digest()[:16]
+        ciphertext = chacha_encrypt(self.key, nonce, plaintext)
+        tag = poly1305_tag(self.key, nonce, plaintext)
+        return nonce + tag + check + ciphertext
     
     def decrypt_bytes(self, encryption: bytes) -> bytes:
-        """Return the plaintext, decrypted with the prepended nonce.""" 
-        nonce = encryption[:12]
-        tag = encryption[12:28]
-        check = encryption[28:60]
-        ciphertext = encryption[60:]
-        plaintext = chacha_encrypt(self.key_bytes, nonce, ciphertext)
-        if self.check_bytes != check:
+        """Return the plaintext, decrypted using the prepended nonce."""
+        saved_nonce = encryption[:12]
+        saved_tag = encryption[12:28]
+        saved_check = encryption[28:44]
+        ciphertext = encryption[44:]
+        check = sha256(saved_nonce + self.passphrase).digest()[:16]
+        if saved_check != check:
             raise BadPassphrase
-        computed_tag = poly1305_tag(self.key_bytes, nonce, plaintext)
-        if computed_tag != tag:
+        # ChaCha is symmetric:
+        plaintext = chacha_encrypt(self.key, saved_nonce, ciphertext)
+        tag = poly1305_tag(self.key, saved_nonce, plaintext)
+        if saved_tag != tag:
             raise BadTag
         return plaintext
 
@@ -115,11 +118,11 @@ class ChaChaContext:
         with open(basename, 'wb') as outfile:
             outfile.write(decrypted)
 
-def check_for_dot_cha(filename):
-    basename, ext = os.path.splitext(filename)
+def check_for_dot_cha(filepath):
+    basepath, ext = os.path.splitext(filepath)
     if ext != '.cha':
         raise ValueError ('The filename extension must be .cha.')
-    return basename
+    return basepath
 
 def can_destroy(filename):
     if os.path.exists(filename):
@@ -138,28 +141,38 @@ def get_passphrase() ->str:
 
 def encrypt_file():
     """Entry point for encrypting a file.  Writes a .cha file."""
-    filename = sys.argv[1]
-    if not can_destroy(filename + '.cha'):
+    try:
+        filepath = sys.argv[1]
+    except IndexError:
+        print('Usage: chacha-encrypt <filename>')
         sys.exit(1)
+    if not can_destroy(filepath + '.cha'):
+        sys.exit(2)
     passphrase = get_passphrase()
     context = ChaChaContext(passphrase)
-    context.encrypt_file(filename)
+    context.encrypt_file(filepath)
 
 def decrypt_file():
     """Entry point for decrypting a .cha file."""
-    filename = sys.argv[1]
     try:
-        basename = check_for_dot_cha(filename)
+        filepath = sys.argv[1]
+    except IndexError:
+        print('Usage: chacha-decrypt <path_to_file.cha>')
+        sys.exit(1)
+    try:
+        basepath = check_for_dot_cha(filepath)
     except ValueError:
         print('The filename extension must be .cha.')
         sys.exit(1)
-    if not can_destroy(basename):
-        sys.exit(1)
+    if not can_destroy(basepath):
+        sys.exit(2)
     passphrase = get_passphrase()
     context = ChaChaContext(passphrase)
     try:
-        context.decrypt_file(filename)
+        context.decrypt_file(filepath)
     except BadPassphrase:
-        print('Invalid passphrase.')
+        print('That pass phrase is invalid.')
+        sys.exit(3)
     except BadTag:
         print('This file has been tampered with!')
+        sys.exit(4)

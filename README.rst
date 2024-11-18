@@ -2,16 +2,17 @@ A CHAcha File Encryptor
 =======================
 
 This Python package provides tools for encrypting and decrypting files with
-the ChaCha20 stream cipher, using a key derived from a pass phrase.
+Daniel Bernstein's ChaCha20 stream cipher, using a key derived from a pass
+phrase. Encrypted files include a Poly1305 authentication tag to detect
+tampering with an encrypted file.
 
 Warning
 -------
 
-This is a work in progress, published here for testing only.  Do not use it
-for anything important.  The file formats and encryption algorithms are
+This is still a work in progress, published here for testing only.  Do not use
+it for anything important.  The file formats and encryption algorithms are
 subject to change, which could leave you with encrypted files that you cannot
-decrypt.  Also the encrypted files are currently not authenticated, which
-introduces security vulnerabilities.
+decrypt.
 
 Installation
 ------------
@@ -46,7 +47,8 @@ You will be prompted for the password, and a decrypted file named *myfile*
 will be created.  The password will be visible until the decryption is
 finished, then erased.
 
-If you install this module with pip then the commands will simply be:
+If you install this module with pip and have configured you path to make
+pip-installed scripts available, then the commands will simply be:
 
   ``% chacha-encrypt myfile``
 
