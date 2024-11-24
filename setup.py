@@ -23,14 +23,14 @@ if not have_chacha_pyx:
     extension = [
         Extension(
             'chacha._chacha', ['src/_chacha/_chacha.c'],
-            extra_compile_args=compile_args,
+            extra_compile_args=compile_options,
             language='c')
     ]
 else:
     extension = cythonize(
         Extension(
             'chacha._chacha', ['src/_chacha/_chacha.pyx'],
-            extra_compile_args=compile_args,
+            extra_compile_args=compile_options,
             language='c'),
     )
 setup(ext_modules=extension)
