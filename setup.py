@@ -5,9 +5,11 @@ import sys, os
 have_chacha_pyx = os.path.exists('src/_chacha/_chacha.pyx')
 have_chacha_c = os.path.exists('src/_chacha/_chacha.c')
 
-compile_args = []
+compiler_options = []
 if sys.platform != 'win32':
-    compile_args.append('-Wno-unreachable-code')
+    compiler_options.append('-Wno-unreachable-code')
+if sys.platform == 'darwin':
+    compiler_options.append('-mmacosx-version-min=10.9')
 
 try:
     from Cython.Build import cythonize
