@@ -5,6 +5,10 @@ import sys, os
 have_chacha_pyx = os.path.exists('src/_chacha/_chacha.pyx')
 have_chacha_c = os.path.exists('src/_chacha/_chacha.c')
 
+compile_args = []
+if sys.platform != 'win32':
+    compile_args.append('-Wno-unreachable-code')
+
 try:
     from Cython.Build import cythonize
 except ImportError:
@@ -17,15 +21,14 @@ if not have_chacha_pyx:
     extension = [
         Extension(
             'chacha._chacha', ['src/_chacha/_chacha.c'],
-            extra_compile_args=['-Wno-unreachable-code'],
+            extra_compile_args=compile_args,
             language='c')
     ]
 else:
     extension = cythonize(
         Extension(
             'chacha._chacha', ['src/_chacha/_chacha.pyx'],
-            extra_compile_args=['-Wno-unreachable-code'],
-            language='c',
-        ),
+            extra_compile_args=compile_args,
+            language='c'),
     )
 setup(ext_modules=extension)
