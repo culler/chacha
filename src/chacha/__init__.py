@@ -40,7 +40,7 @@ import sys
 from hashlib import sha256
 from ._chacha import chacha_encrypt
 from ._chacha import poly1305_tag
-__version__ = '1.0.0a6'
+__version__ = '1.0.0a7'
 class BadPassphrase(Exception):
     pass
 

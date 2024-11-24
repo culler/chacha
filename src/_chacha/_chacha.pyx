@@ -4,6 +4,11 @@
 
 #cython: language-level=3str
 
+cdef extern from 'config.h':
+    pass
+cdef extern from 'machine.h':
+    pass
+
 include 'implementation.pxi'
 
 cdef extern from *:
