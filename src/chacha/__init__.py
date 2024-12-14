@@ -2,8 +2,7 @@
 # under the MIT license.  See the file LICENSE for details.
 # Copyright © 2024 by Marc Culler and others️
 
-"""
-This package provides tools for encrypting and decrypting files with
+"""This package provides tools for encrypting and decrypting files with
 the ChaCha20 stream cipher using a key based on a pass phrase.
 
 It provides two entry points named encrypt and decrypt.  That means
@@ -26,21 +25,30 @@ You will be prompted for the password, and a decrypted file named myfile.
 will be created.  The password will be visible until the decryption is
 finished, then erased.
 
+To view myfile.cha with less:
+
+  % python3 -m chacha.view myfile.cha
+
+You will be prompted for the password, and the decrypted plaintext
+will be piped to less.  The password will be visible until less is
+launched, then erased.
+
 If you install this module with pip then the commands will simply be:
 
   % chacha-encrypt myfile
-
-and
-
   % chacha-decrypt myfile.cha
+  % chacha-view myfile.cha
+
 """
 
 import os
 import sys
+import tempfile
+import subprocess
 from hashlib import sha256
 from ._chacha import chacha_encrypt
 from ._chacha import poly1305_tag
-__version__ = '1.0.0a7'
+__version__ = '1.0.0b2'
 class BadPassphrase(Exception):
     pass
 
@@ -118,6 +126,15 @@ class ChaChaContext:
         with open(basename, 'wb') as outfile:
             outfile.write(decrypted)
 
+    def check_passphrase(self, filename: str) -> None:
+        """Check that the file was encrypted with our pass phrase."""
+        with open(filename, 'rb') as encrypted:
+            header = encrypted.read(44)
+        saved_nonce = header[:12]
+        saved_check = header[28:44]
+        check = sha256(saved_nonce + self.passphrase).digest()[:16]
+        return (check == saved_check)    
+
 def check_for_dot_cha(filepath):
     basepath, ext = os.path.splitext(filepath)
     if ext != '.cha':
@@ -139,20 +156,24 @@ def get_passphrase() ->str:
     print('\033[1F\033[0K', end='')
     return passphrase.encode('utf-8')
 
-def encrypt_file():
+def encrypt_file() -> None:
     """Entry point for encrypting a file.  Writes a .cha file."""
     try:
         filepath = sys.argv[1]
     except IndexError:
         print('Usage: chacha-encrypt <filename>')
         sys.exit(1)
-    if not can_destroy(filepath + '.cha'):
+    target = filepath + '.cha'
+    if not can_destroy(target):
         sys.exit(2)
     passphrase = get_passphrase()
     context = ChaChaContext(passphrase)
+    if os.path.exists(target) and not context.check_passphrase(target):
+        print('%s was not encrypted with that pass phrase! Aborting.' % target)
+        sys.exit(2)
     context.encrypt_file(filepath)
 
-def decrypt_file():
+def decrypt_file() -> None:
     """Entry point for decrypting a .cha file."""
     try:
         filepath = sys.argv[1]
@@ -176,3 +197,31 @@ def decrypt_file():
     except BadTag:
         print('This file has been tampered with!')
         sys.exit(4)
+
+def view_file() -> None:
+    """ Entry point which Decrypts a file and pipes it to less. """
+    try:
+        filepath = sys.argv[1]
+    except IndexError:
+        print('Usage: chacha-view <path_to_file.cha>')
+        sys.exit(1)
+    try:
+        check_for_dot_cha(filepath)
+    except ValueError:
+        print('The filename extension must be .cha.')
+        sys.exit(1)
+    passphrase = get_passphrase()
+    context = ChaChaContext(passphrase)
+    try:
+        plaintext = context.decrypt_file_to_bytes(filepath)
+    except BadPassphrase:
+        print('That pass phrase is invalid.')
+        sys.exit(3)
+    except BadTag:
+        print('This file has been tampered with!')
+        sys.exit(4)
+    with tempfile.TemporaryFile() as temp:
+        temp.write(plaintext)
+        less = subprocess.Popen(['/usr/bin/less'], stdin=subprocess.PIPE,
+                                stdout=sys.stdout, stderr=sys.stderr)
+        less.communicate(plaintext)

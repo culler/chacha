@@ -28,6 +28,7 @@ classifiers = [
 [project.scripts]
 chacha-encrypt = "chacha.encrypt:main"
 chacha-decrypt = "chacha.decrypt:main"
+chacha-view = "chacha.view:main"
 
 [project.urls]
 "Homepage" = "https://github.com/culler/chafe"
