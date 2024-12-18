@@ -48,7 +48,7 @@ import subprocess
 from hashlib import sha256
 from ._chacha import chacha_encrypt
 from ._chacha import poly1305_tag
-__version__ = '1.0.0b2'
+__version__ = '1.0.0'
 class BadPassphrase(Exception):
     pass
 
@@ -150,8 +150,7 @@ def can_destroy(filename):
             return False
     return True
 
-def get_passphrase() ->str:
-    prompt = 'pass phrase: '
+def get_passphrase(prompt: str='pass phrase: ') ->str:
     passphrase = input(prompt)
     print('\033[1F\033[0K', end='')
     return passphrase.encode('utf-8')
